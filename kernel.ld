@@ -12,7 +12,7 @@ SECTIONS {
 		*(.rodata .rodata.*);
 	}
 
-	.data : ALGIN(4) {
+	.data : ALIGN(4) {
 		*(.data .data.*);
 	}
 
