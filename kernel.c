@@ -6,6 +6,7 @@ typedef unsigned int uint32_t;
 typedef uint32_t size_t;
 
 extern char __bss[], __bss_end[], __stack_top[];
+extern char __free_ram[], __free_ram_end[];
 
 struct sbiret sbi_call(long arg0, long arg1, long arg2, long arg3, long arg4, long arg5, long fid, long eid) {
 	register long a0 __asm__("a0") = arg0;
@@ -35,6 +36,19 @@ void *memset(void *buf, char c, size_t n) {
 	while (n--)
 		*p++ = c;
 	return buf;
+}
+
+paddr_t alloc_pages(uint32_t n) {
+	static paddr_t next_paddr = (paddr_t) __free_ram;
+	paddr_t paddr = next_paddr;
+	next_paddr += n * PAGESIZE;
+
+	if (next_paddr > (paddr_t) __free_ram_end) {
+		PANIC("out of memory!");
+	}
+
+	memset((void *) paddr, 0, n * PAGESIZE);
+	return paddr;
 }
 
 __attribute__((naked))
@@ -126,10 +140,13 @@ void handle_trap(struct trap_frame *f) {
 void kernel_main(void) {
 	memset(__bss, 0, (size_t) __bss_end - (size_t) __bss);
 
-	printf("Hello World!");
+	printf("Hello World!\n");
 
-	WRITE_CSR(stvec, (uint32_t) kernel_entry);
-	__asm__ __volatile__("unimp");
+	paddr_t paddr0 = alloc_pages(1);
+	paddr_t paddr1 = alloc_pages(2);
+	printf("alloc pages test paddr0=0x%x\n", paddr0);
+	printf("alloc pages test paddr1=0x%x\n", paddr1);
+
 	for(;;) {
 		__asm__ __volatile__("wfi");
 	}

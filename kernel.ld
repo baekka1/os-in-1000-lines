@@ -29,5 +29,5 @@ SECTIONS {
 	. = ALIGN(4096);
 	__free_ram = .;
 	. += 1024 * 64 * 1024;
-	__end_free_ram = .;
+	__free_ram_end = .;
 }
