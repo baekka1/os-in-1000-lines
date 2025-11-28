@@ -25,4 +25,9 @@ SECTIONS {
 	. = ALIGN(4);
 	. += 128 * 1024;
 	__stack_top = .;
+
+	. = ALIGN(4096);
+	__free_ram = .;
+	. += 1024 * 64 * 1024;
+	__end_free_ram = .;
 }
