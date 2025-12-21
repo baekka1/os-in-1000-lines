@@ -7,6 +7,7 @@ typedef uint32_t size_t;
 
 extern char __bss[], __bss_end[], __stack_top[];
 extern char __free_ram[], __free_ram_end[];
+extern char __kernel_base;
 
 struct sbiret sbi_call(long arg0, long arg1, long arg2, long arg3, long arg4, long arg5, long fid, long eid) {
 	register long a0 __asm__("a0") = arg0;
@@ -41,13 +42,13 @@ void *memset(void *buf, char c, size_t n) {
 paddr_t alloc_pages(uint32_t n) {
 	static paddr_t next_paddr = (paddr_t) __free_ram;
 	paddr_t paddr = next_paddr;
-	next_paddr += n * PAGESIZE;
+	next_paddr += n * PAGE_SIZE;
 
 	if (next_paddr > (paddr_t) __free_ram_end) {
 		PANIC("out of memory!");
 	}
 
-	memset((void *) paddr, 0, n * PAGESIZE);
+	memset((void *) paddr, 0, n * PAGE_SIZE);
 	return paddr;
 }
 
@@ -136,7 +137,7 @@ void kernel_entry(void) {
 	);
 }
 
-void handle_trap(struct trap_frame *f) {
+void handle_trap() {
 	uint32_t scause = READ_CSR(scause);
 	uint32_t stval = READ_CSR(stval);
 	uint32_t user_pc = READ_CSR(sepc);
@@ -186,6 +187,27 @@ __attribute__((naked)) void switch_context(uint32_t *prev_sp,
     );
 }
 
+void map_page(uint32_t *table1, uint32_t vaddr, paddr_t paddr, uint32_t flags) {
+	if (!is_aligned(vaddr, PAGE_SIZE))
+		PANIC("unaligned vaddr %x", vaddr);
+
+	if (!is_aligned(paddr, PAGE_SIZE))
+		PANIC("unaligned paddr %x", paddr);
+
+	uint32_t vpn1 = (vaddr >> 22) & 0x3ff;
+	if ((table1[vpn1] & PAGE_V) == 0) {
+		// Create the 1st level page table if it doesn't exist
+		uint32_t pt_paddr = alloc_pages(1);
+		table1[vpn1] = ((pt_paddr / PAGE_SIZE) << 10) | PAGE_V;
+	}
+
+	// Set the 2nd level page table entry to map the physical page
+	uint32_t vpn0 = (vaddr >> 12) & 0x3ff;
+	uint32_t *table0 = (uint32_t *) ((table1[vpn1] >> 10) * PAGE_SIZE);
+	table0[vpn0] = ((paddr / PAGE_SIZE) << 10) | flags | PAGE_V;
+	
+}
+
 struct process procs[PROCS_MAX];
 
 struct process *create_process(uint32_t pc) {
@@ -219,10 +241,17 @@ struct process *create_process(uint32_t pc) {
 	*--sp = 0; //s0
 	*--sp = (uint32_t) pc; //ra
 	
+	// Map kernel pages
+	uint32_t *page_table = (uint32_t *) alloc_pages(1);
+	for (paddr_t paddr = (paddr_t) __kernel_base;
+	paddr < (paddr_t) __free_ram_end; paddr += PAGE_SIZE)
+		map_page(page_table, paddr, paddr, PAGE_R | PAGE_W | PAGE_X);
+	
 	// Initalize fields
 	proc->pid = i + 1;
 	proc->state = PROC_RUNNABLE;
 	proc->sp = (uint32_t) sp;
+	proc->page_table = page_table;
 	return proc;
 }
 
@@ -251,9 +280,13 @@ void yield(void) {
 		return;
 
 	__asm__ __volatile__(
+		"sfence.vma\n"
+		"csrw satp, %[satp]\n"
+		"sfence.vma\n"
 		"csrw sscratch, %[sscratch]\n"
 		:
-		: [sscratch] "r" ((uint32_t) &next->stack[sizeof(next->stack)])
+		: [satp] "r" (SATP_SV32 | ((uint32_t) next->page_table / PAGE_SIZE)),
+		  [sscratch] "r" ((uint32_t) &next->stack[sizeof(next->stack)])
 	);
 
 	// context switch
