@@ -7,7 +7,7 @@ typedef uint32_t size_t;
 
 extern char __bss[], __bss_end[], __stack_top[];
 extern char __free_ram[], __free_ram_end[];
-extern char __kernel_base;
+extern char __kernel_base[];
 
 struct sbiret sbi_call(long arg0, long arg1, long arg2, long arg3, long arg4, long arg5, long fid, long eid) {
 	register long a0 __asm__("a0") = arg0;
@@ -189,7 +189,7 @@ __attribute__((naked)) void switch_context(uint32_t *prev_sp,
 
 void map_page(uint32_t *table1, uint32_t vaddr, paddr_t paddr, uint32_t flags) {
 	if (!is_aligned(vaddr, PAGE_SIZE))
-		PANIC("unaligned vaddr %x", vaddr);
+		PANIC("unaligned vaddr 0x%x", vaddr);
 
 	if (!is_aligned(paddr, PAGE_SIZE))
 		PANIC("unaligned paddr %x", paddr);
