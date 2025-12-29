@@ -165,6 +165,7 @@ void kernel_entry(void) {
 	);
 }
 
+<<<<<<< HEAD
 /*
 long getchar(void) {
 	struct sbiret ret = sbi_call(0, 0, 0, 0, 0, 0, 0, 2);
@@ -296,6 +297,14 @@ void read_write_disk(void *buf, unsigned sector, int is_write) {
     // For read operations, copy the data into the buffer.
     if (!is_write)
         memcpy(buf, blk_req->data, SECTOR_SIZE);
+=======
+void handle_trap() {
+	uint32_t scause = READ_CSR(scause);
+	uint32_t stval = READ_CSR(stval);
+	uint32_t user_pc = READ_CSR(sepc);
+
+	PANIC("unexpected trap scause=%x, stval=%x, sepc=%x\n", scause, stval, user_pc);
+>>>>>>> parent of 95f964c (putchar syscall)
 }
 
 __attribute__((naked)) void switch_context(uint32_t *prev_sp,
